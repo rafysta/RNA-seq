@@ -17,6 +17,7 @@ if(!exists("FLAG_loaded")){
     make_option(c("--color_by"), default="NA", help="output pic were color by"),
     make_option(c("--shape_by"), default="NA", help="output pic were shape by"),
     make_option(c("--size_by"), default="NA", help="output pic were size by"),
+    make_option(c("--pallete"), default="NA", help="specify colors"),
     make_option(c("--width"), default=5.2, help="width of output image")
   )
   opt <- parse_args(OptionParser(option_list=option_list))
@@ -48,7 +49,7 @@ Clustering_tSNE <- function(DATA, seed=20, perplexity = 10, theta = 0, max_iter=
 }
 
 plot_tSNE <- function(tsne, file="", title=NULL,  cell_table="", color_by=NULL, shape_by=NULL, size_by=NULL, 
-                      width=5.5, option=NULL){
+                      width=5.5, alpha=0.5, pallete = NULL, option=NULL){
   ### cell_tableはdata.frame
   # cellというカラムが定義されていること！
   suppressPackageStartupMessages(library(dplyr))
@@ -57,19 +58,20 @@ plot_tSNE <- function(tsne, file="", title=NULL,  cell_table="", color_by=NULL, 
   D_score <- data.frame(Cell=tsne$cell, x=tsne$Y[,1], y=tsne$Y[,2], stringsAsFactors = FALSE)
   D_table <- dplyr::left_join(D_score, cell_table, by="Cell", copy=FALSE)
   if(is.null(color_by)){
-    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
       labs(x="Component1", y="Component2", title=title)
   }else{
     if(length(unique(D_table[,color_by])) < 20){
-      pallete <- c("#00007F", "blue", "#007FFF", 
-                   "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")
+      if(is.null(pallete)){
+        pallete <-c("#00007F", "blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")
+      }
       colors <- colorRampPalette(pallete)(length(unique(D_table[,color_by])))
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
         scale_color_manual(values=colors, name=color_by) +
         labs(x="Component1", y="Component2", title=title)
     }else{
       mid <- median(D_table[,color_by], na.rm = TRUE)
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
         scale_color_gradient2(midpoint=mid, low="blue", mid="grey90",　high="red", space ="Lab" )+
         labs(x="Component1", y="Component2", title=title)
     }
@@ -85,7 +87,7 @@ plot_tSNE <- function(tsne, file="", title=NULL,  cell_table="", color_by=NULL, 
 }
 
 plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", color_by=NULL, shape_by=NULL, 
-                     size_by=NULL, width=5.3, option=NULL){
+                     size_by=NULL, width=5.3, alpha=0.5, pallete = NULL,  option=NULL){
   ### cell_tableはdata.frame
   # cellというカラムが定義されていること！
   suppressPackageStartupMessages(library(dplyr))
@@ -98,21 +100,22 @@ plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", co
   contribution <- pca$sdev^2/sum(pca$sdev^2)*100
   
   if(is.null(color_by)){
-    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
       labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
            y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
   }else{
     if(length(unique(D_table[,color_by])) < 20){
-      pallete <- c("#00007F", "blue", "#007FFF", 
-                   "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")
+      if(is.null(pallete)){
+        pallete <-c("#00007F", "blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")
+      }
       colors <- colorRampPalette(pallete)(length(unique(D_table[,color_by])))
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
         scale_color_manual(values=colors, name=color_by) +
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
     }else{
       mid <- median(D_table[,color_by], na.rm = TRUE)
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point() +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
         scale_color_gradient2(midpoint=mid, low="blue", mid="grey90",　high="red", space ="Lab" )+
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
@@ -142,6 +145,11 @@ if(!exists("FLAG_loaded")){
   METHOD <- as.character(opt["method"])
   FLAG_plot <- eval(parse(text=as.character(opt["graph"])))
   img_width <- as.numeric(as.character(opt["width"]))
+  
+  pallete <- as.character(opt["pallete"])
+  if(pallete != "NA"){
+    pallete <- strsplit(pallete, ",")
+  }
   
   NA_or_character <- function(name){
     ttt = as.character(opt[name])
@@ -206,7 +214,7 @@ if(!exists("FLAG_loaded")){
   if(METHOD=="tSNE"){
     perplexity <- as.numeric(as.character(opt["perplexity"]))
     FILE_tsne <- as.character(opt["in"])
-    if(is.na(FILE_tsne)){
+    if(FILE_tsne == "NA"){
       FILE_tsne <- paste(DIR_OUT, "tSNE_perplexity_", perplexity, ".rds", sep="")
     }
     if(file.exists(FILE_tsne)){
@@ -223,7 +231,7 @@ if(!exists("FLAG_loaded")){
     }
   }else if(METHOD == "PCA"){
     FILE_pca <- as.character(opt["in"])
-    if(is.na(FILE_pca)){
+    if(FILE_pca == "NA"){
       FILE_pca <- paste(DIR_OUT, "pca.rds", sep="")
     }
     if(file.exists(FILE_pca)){

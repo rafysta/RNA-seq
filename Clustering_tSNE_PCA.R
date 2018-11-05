@@ -110,7 +110,7 @@ plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", co
       }
       colors <- colorRampPalette(pallete)(length(unique(D_table[,color_by])))
       p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
-        scale_color_manual(values=colors, name=color_by) +
+        scale_color_manual(values=colors, name=color_by) + guides(size = FALSE) +
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
     }else{

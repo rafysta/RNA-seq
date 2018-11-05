@@ -41,7 +41,7 @@ DATA <- readRDS(FILE_mat)
 DATA <- DATA[,SAMPLES]
 condition <- factor(group)
 
-FILE_DESeq_result <- paste(DIR_OUT, "deseq2.rds", sep="")
+FILE_DESeq_result <- paste0(DIR_OUT, "deseq2.rds")
 if(file.exists(FILE_DESeq_result)){
   dds <- readRDS(FILE_DESeq_result)
 }else{
@@ -56,8 +56,8 @@ if(file.exists(FILE_DESeq_result)){
 
 
 # Plot dispersions
-FILE_dispersion <- paste(DIR_OUT, "qc-dispersions.png", sep="")
-if(FLAG_figure){
+FILE_dispersion <- paste0(DIR_OUT, "qc-dispersions.png")
+if(FLAG_figure && !file.exists(FILE_dispersion)){
   if(FLAG_cairo){
     Cairo(file=FILE_dispersion, 1000, 1000, pointsize=20)
   }else{
@@ -70,8 +70,8 @@ if(FLAG_figure){
 
 
 # Regularized log transformation for clustering/heatmaps, etc
-FILE_table_normalized_object <- paste(DIR_OUT, "read_table_norm.rds", sep="")
-FILE_talbe_normalized_text <- paste(DIR_OUT, "read_table_norm.txt" ,sep="")
+FILE_table_normalized_object <- paste0(DIR_OUT, "read_table_norm.rds")
+FILE_talbe_normalized_text <- paste0(DIR_OUT, "read_table_norm.txt")
 if(file.exists(FILE_table_normalized_object)){
   DATA.norm <- readRDS(FILE_table_normalized_object)
 }else{
@@ -88,9 +88,9 @@ mycols <- brewer.pal(8, "Dark2")[1:length(unique(condition))]
 
 # Sample distance heatmap
 
-FILE_distance <- paste(DIR_OUT, "qc-heatmap-samples.png", sep="")
+FILE_distance <- paste0(DIR_OUT, "qc-heatmap-samples.png")
 
-if(FLAG_figure){
+if(FLAG_figure  && !file.exists(FILE_distance)){
   suppressPackageStartupMessages(library(gplots))
   rld <- rlogTransformation(dds)
   sampleDists <- as.matrix(dist(t(DATA.norm)))
@@ -106,23 +106,31 @@ if(FLAG_figure){
   dummy <- dev.off()
 }
 
-if(FLAG_figure){
-  LIBRARY_clustering <- paste(script.basename, "Clustering_tSNE_PCA.R", sep="/")
+if(FLAG_figure && !file.exists(paste0(DIR_OUT, "qc-pca12.png"))){
+  LIBRARY_clustering <- paste(script.basename, "../../Clustering_tSNE_PCA.R", sep="/")
   FLAG_loaded <- TRUE
   source(LIBRARY_clustering)
-  colors_pca <- rainbow(length(SAMPLES))
-  pca <- Clustering_PCA(DATA.norm, rownames(DATA.norm), colnames(DATA.norm))
-  plot_PCA(pca, col_list=colors_pca, col_eachcell=colors_pca, names=SAMPLES, file=paste(DIR_OUT, "qc-pca12.png", sep=""))
-  plot_PCA(pca, col_list=colors_pca, col_eachcell=colors_pca, names=SAMPLES, file=paste(DIR_OUT, "qc-pca23.png", sep=""), Xcom=2, Ycom=3)
-  plot_PCA(pca, col_list=colors_pca, col_eachcell=colors_pca, names=SAMPLES, file=paste(DIR_OUT, "qc-pca13.png", sep=""), Xcom=1, Ycom=3)
+  FILE_pca <- paste0(DIR_OUT, "pca.rds")
+  if(file.exists(FILE_pca)){
+    pca <- readRDS(FILE_pca)
+  }else{
+    pca <- Clustering_PCA(DATA.norm)
+    saveRDS(pca, FILE_pca)
+  }
+  width <- 4 + max(nchar(group))/8
+  cell_table <- data.frame(Cell=SAMPLES, group=group, sample=SAMPLES, stringsAsFactors = FALSE)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca12.png"), cell_table=cell_table, color_by="group", size_by=2, width=width)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca23.png"), cell_table=cell_table, color_by="group", size_by=2, Xcom=2, Ycom=3, width=width)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca13.png"), cell_table=cell_table, color_by="group", size_by=2, Xcom=1, Ycom=3, width=width)
 }
+q()
 
 # differential expression genes
 getDiffGenes <- function(con1, con2){
-  dir.create(paste(DIR_OUT, "DE_", con1, "_", con2, sep=""), showWarnings = FALSE)
-  DIR_out_sub <- paste(DIR_OUT, "DE_", con1, "_", con2, "/", sep="")
+  dir.create(paste0(DIR_OUT, "DE_", con1, "_", con2), showWarnings = FALSE)
+  DIR_out_sub <- paste0(DIR_OUT, "DE_", con1, "_", con2, "/")
   
-  FILE_res <- paste(DIR_out_sub, "res.rds", sep="")
+  FILE_res <- paste0(DIR_out_sub, "res.rds")
   
   if(file.exists(FILE_res)){
     res <- readRDS(FILE_res)
@@ -135,7 +143,7 @@ getDiffGenes <- function(con1, con2){
   # table(res$padj<0.05)
   
   ### Examine plot of p-values
-  FILE_MA <- paste(DIR_out_sub, "pvaldis.png", sep="")
+  FILE_MA <- paste0(DIR_out_sub, "pvaldis.png")
   if(FLAG_figure){
     if(FLAG_cairo){
       Cairo(file=FILE_MA, 1000, 1000, pointsize=20)
@@ -147,7 +155,7 @@ getDiffGenes <- function(con1, con2){
   }
   
   ### MA plot
-  FILE_MA <- paste(DIR_out_sub, "maplot.png", sep="")
+  FILE_MA <- paste0(DIR_out_sub, "maplot.png")
   if(FLAG_figure){
     if(FLAG_cairo){
       Cairo(file=FILE_MA, width=15, height=13, units = "cm", res = 72)
@@ -172,7 +180,7 @@ getDiffGenes <- function(con1, con2){
   colnames(output) <- c("ID", "average", "log2FC", "p", "FDR", "sigCate")
   
   ## Write results
-  FILE_DE <- paste(DIR_out_sub, "DE.txt", sep="")
+  FILE_DE <- paste0(DIR_out_sub, "DE.txt")
   write.table(output, file=FILE_DE, quote=FALSE, sep="\t", eol="\n", row.names=FALSE, col.names=TRUE)
   
   number <- c(sum(index_up), length(sig_cate) - sum(index_up) - sum(index_down), sum(index_down), length(sig_cate))
@@ -182,7 +190,7 @@ getDiffGenes <- function(con1, con2){
   rownames(SUMMARY_TABLE) <- c("Up", "NoSig", "Down", "Total")
   colnames(SUMMARY_TABLE) <- c("number", "percent")
   
-  write.table(SUMMARY_TABLE, file=paste(DIR_out_sub, "Summary_", con1, "_divide_", con2, ".txt", sep=""), 
+  write.table(SUMMARY_TABLE, file=paste0(DIR_out_sub, "Summary_", con1, "_divide_", con2, ".txt"), 
               quote = F, sep="\t", eol="\n", row.names = T, col.names = NA)
 }
 

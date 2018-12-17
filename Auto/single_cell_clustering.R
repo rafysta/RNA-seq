@@ -6,6 +6,8 @@ option_list <- list(
   make_option(c("-i", "--in"), default="NA", help="file of normalized matrices"),
   make_option(c("-o", "--out"), default="NA", help="output directory"),
   make_option(c("-m", "--meta"), default="NA", help="meta file information for each cell"),
+  make_option(c("--column"), default="2", help="column_number used for coloring"),
+  make_option(c("--color"), default="NA", help="custome colors. separated by ,"),
   make_option(c("--gene"), default="NA", help="file of gene list")
   
 )
@@ -23,6 +25,8 @@ FILE_serat <- paste0(DIR_out, "serat.rds")
 
 Gene_list <- read.table(as.character(opt["gene"]), header=FALSE, sep="\t", stringsAsFactors = FALSE)
 Gene_list <- Gene_list[,1]
+
+
 
 #=============================================
 # Serat objectを取得
@@ -44,16 +48,42 @@ if(!file.exists(FILE_serat)){
 }
 
 
+# 追加の情報
+if(FILE_meta != "NA"){
+  D_cell <- read.table(FILE_meta, header=TRUE, sep="\t", stringsAsFactors = FALSE)
+  NUM_column <- as.numeric(as.character(opt["column"]))
+  
+  D_cell <- D_cell[,c(1,NUM_column)]
+  colnames(D_cell) <- c("cell", "meta")
+  
+  AddInfo <- D_cell[,"meta"]
+  names(AddInfo) <- D_cell[,"cell"]
+
+  serat <- AddMetaData(object = serat, metadata = AddInfo, col.name = "meta")
+}
+
+
 #=============================================
 # PCA
 #=============================================
 suppressWarnings(suppressMessages(library(dplyr)))
 suppressWarnings(suppressMessages(library(ggplot2)))
+suppressWarnings(suppressMessages(library(cowplot)))
 suppressWarnings(suppressMessages(library(ggrepel)))
+
+
+### Color palette
+Colors <- as.character(opt["color"])
+if(Colors != "NA"){
+  Colors <- unlist(strsplit(Colors, ","))
+}else{
+  Colors <- NULL
+}
 
 ### PCA (1回目)
 serat <- RunPCA(object = serat, pc.genes = Gene_list, do.print = FALSE, pcs.compute=20)
-p <- PCAPlot(object = serat, dim.1 = 1, dim.2 = 2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="PCA")
+p <- PCAPlot(object = serat, dim.1 = 1, dim.2 = 2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="PCA", group.by="meta", cols.use=Colors)
+p <- p + theme_cowplot() + theme(legend.position="none")
 save_plot(paste0(DIR_out, "PCA_1.png"), p, base_height = 5, base_width = 5)
 
 
@@ -81,27 +111,27 @@ save_plot(paste0(DIR_out, "PCA_score_distribution.png"), p, base_height = 5, bas
 
 ### PCA(2回目)
 serat2  <- RunPCA(object = serat2, pc.genes = Gene_list, do.print = FALSE, pcs.compute=20)
-p <- PCAPlot(object = serat2, dim.1 = 1, dim.2 = 2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="PCA")
+p <- PCAPlot(object = serat2, dim.1 = 1, dim.2 = 2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="PCA", group.by="meta", cols.use=Colors)
+p <- p + theme_cowplot() + theme(legend.position="none")
 save_plot(paste0(DIR_out, "PCA_2.png"), p, base_height = 5, base_width = 5)
-P1 <- p
+p1 <- p
 
 
-# 追加の情報を読み取る
-if(FILE_meta != "NA"){
-  D_cell <- read.table(FILE_meta, header=TRUE, sep="\t", stringsAsFactors = FALSE)
-}
 
 #=============================================
 # tSNE
 #=============================================
 serat <- RunTSNE(object = serat, dims.use = 1:10, do.fast = TRUE)
-p <- TSNEPlot(object = serat, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="tSNE")
+p <- TSNEPlot(object = serat, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="tSNE", colors.use=Colors)
+p <- p + theme_cowplot() + theme(legend.position="none")
 save_plot(paste0(DIR_out, "tSNE_1.png"), p, base_height = 5, base_width = 5)
 
 serat2 <- RunTSNE(object = serat2, dims.use = 1:10, do.fast = TRUE)
-p <- TSNEPlot(object = serat2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="tSNE")
+p <- TSNEPlot(object = serat2, pt.size=1, do.return=TRUE, no.legend =TRUE, plot.title="tSNE", colors.use=Colors)
+p <- p + theme_cowplot() + theme(legend.position="none")
 save_plot(paste0(DIR_out, "tSNE_2.png"), p, base_height = 5, base_width = 5)
 p2 <- p
+
 
 #=============================================
 # SIMILR
@@ -118,10 +148,24 @@ SIM_estimate <- SIM_estimate %>% filter(min_rank(value) < 4) %>% arrange(desc(va
 
 set.seed(1111)
 for(cluster in SIM_estimate){
-  sim <- SIMLR(X = pca_data, c = cluster)
-  colnames(sim) <- c("SIMLR_1",  "SIMLR_2")
-  p <- ggplot(sim, aes(x=SIMLR_1, y=SIMLR_2)) + geom_point(alpha=0.5, size=1) +
+  FILE_sim <- paste0(DIR_out, "SIMLR_cluster_", cluster, ".txt")
+  if(file.exists(FILE_sim)){
+    sim <- read.table(FILE_sim, header=TRUE, sep="\t", stringsAsFactors = FALSE)
+  }else{
+    sim <- SIMLR(X = pca_data, c = cluster)
+    sim <- data.frame(sim$ydata)
+    colnames(sim) <- c("SIMLR_1",  "SIMLR_2")
+    sim <- cbind(colnames(pca_data), sim)
+    colnames(sim)[1] <- "cell"
+    write.table(sim, FILE_sim, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  }
+  sim <- dplyr::left_join(sim, D_cell, by="cell")
+  
+  p <- ggplot(sim, aes(x=SIMLR_1, y=SIMLR_2, color=meta, stroke=0)) + geom_point(size=1.5) +
     labs(title=paste0("SIMLR (cluster# = ",cluster, ")")) + theme(legend.position="none")
+  if(!is.null(Colors)){
+    p <- p + scale_color_manual(values=Colors)
+  }
   save_plot(paste0(DIR_out, "SIMLR_cluster_", cluster, ".png"), p, base_height = 5, base_width = 5)
   p3 <- p
 }

@@ -99,7 +99,7 @@ if(!file.exists(FILE_pca2)){
 }else{
   pca2 <- readRDS(FILE_pca2)
 }
-plot_PCA(pca2, file=paste0(DIR_out, "pca2.png"))
+p1 <- plot_PCA(pca2, file=paste0(DIR_out, "pca2.png"))
 
 
 
@@ -113,8 +113,7 @@ if(!file.exists(FILE_tsne)){
 }else{
   tsne <- readRDS(FILE_tsne)
 }
-plot_tSNE(tsne, file=paste0(DIR_out, "tsne.png"))
-
+p2 <- plot_tSNE(tsne, file=paste0(DIR_out, "tsne.png"))
 
 
 
@@ -128,8 +127,14 @@ if(!file.exists(FILE_SIMILR)){
 }else{
   sim <- readRDS(FILE_SIMILR)
 }
-plot_SIMILR(sim, file=paste0(DIR_out, "SIMILR.png"))
+p3 <- plot_SIMILR(sim, file=paste0(DIR_out, "SIMILR.png"))
 
+
+#=============================================
+# Mix three graph
+#=============================================
+p <- plot_grid(p1, p2, p3, nrow=3, align="v")
+save_plot(paste0(DIR_out, "clustering_mix.png"), p, ncol=1, nrow=3)
 
 
 

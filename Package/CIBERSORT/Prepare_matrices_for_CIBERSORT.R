@@ -5,7 +5,8 @@ suppressPackageStartupMessages(library("optparse"))
 option_list <- list(  
   make_option(c("-i", "--in"), default="NA", help="input matrices"),
   make_option(c("-e", "--Ensemble"), default="TRUE", help="gene name is Ensemble (TRUE) or gene_symbole(FALSE)"),
-  make_option(c("-o", "--out"), default="NA", help="output matrices")
+  make_option(c("-o", "--out"), default="NA", help="output matrices"),
+  make_option(c("--normalized"), default="FALSE", help="input matrices is normalized (TRUE) or not (FALSE)")
 )
 opt <- parse_args(OptionParser(option_list=option_list))
 
@@ -28,19 +29,23 @@ conv2Quantile <- function(mat){
   mat.norm <- normalize.quantiles(log2(mat + 1))
   rownames(mat.norm) <- rownames(mat)
   colnames(mat.norm) <- colnames(mat)
-  mat
+  mat.norm
 }
 
 
 FILE_in <- as.character(opt["in"])
 FILE_out <- as.character(opt["out"])
 FLAG_ensemble <- eval(parse(text=as.character(opt["Ensemble"])))
+FLAG_normalized <- eval(parse(text=as.character(opt["normalized"])))
 
 
 if(sum((grep("\\.rds$", FILE_in))) == 1){
   mat <- readRDS(FILE_in)
 }else{
   mat <- as.matrix(read.table(FILE_in, header=TRUE, sep="\t", stringsAsFactors = FALSE, check.names = FALSE))
+}
+if(!is.matrix(mat)){
+  mat <- as.matrix(mat)
 }
 
 ### Convert Ensemble to Gene symbol
@@ -58,9 +63,12 @@ if(FLAG_ensemble){
 
 commonGene <- intersect(gene_CIBERSORT, rownames(mat))
 detected <- apply(mat[commonGene,] > 0, 2, sum)
-mat <- mat[commonGene, names(mat[detected !=0])]
-mat.norm <- conv2Quantile(mat)
-write.table(mat.norm, FILE_out, sep = "\t", row.names = TRUE, col.names = NA, quote = FALSE)
+detected
+mat <- mat[commonGene, colnames(mat[,detected !=0])]
+if(!FLAG_normalized){
+  mat <- conv2Quantile(mat)
+}
+write.table(mat, FILE_out, sep = "\t", row.names = TRUE, col.names = NA, quote = FALSE)
 
 
 

@@ -63,7 +63,6 @@ if(FLAG_ensemble){
 
 commonGene <- intersect(gene_CIBERSORT, rownames(mat))
 detected <- apply(mat[commonGene,] > 0, 2, sum)
-detected
 mat <- mat[commonGene, colnames(mat[,detected !=0])]
 if(!FLAG_normalized){
   mat <- conv2Quantile(mat)

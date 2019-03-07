@@ -16,9 +16,9 @@ option_list <- list(
   make_option(c("--legend"), default="NA", help="legend image file"),
   make_option(c("--gene"), default="NA", help="file of gene list"),
   make_option(c("--cell"), default="NA", help="file of cell list"),
-  make_option(c("--le_height"), default="NA", help="legend height"),
-  make_option(c("--le_width"), default="NA", help="legend width")
-  
+  make_option(c("--le_height"), default="4", help="legend height"),
+  make_option(c("--le_width"), default="NA", help="legend width"),
+  make_option(c("--alpha"), default="0.5", help="plot alpha value")
 )
 opt <- parse_args(OptionParser(option_list=option_list))
 
@@ -69,9 +69,10 @@ setOption2 <- function(string){
 color_by <- setOption("color_by")
 shape_by <- setOption("shape_by")
 size_by <- setOption("size_by")
+alpha <- as.numeric(as.character(opt["alpha"]))
 TITLE <- setOption("title")
 FILE_legend <- setOption("legend")
-le_height <- setOption2("le_height")
+le_height <- as.numeric(as.character(opt["le_height"]))
 le_width <- setOption2("le_width")
 
 FILE_gene <- as.character(opt["gene"])
@@ -135,7 +136,8 @@ if(!file.exists(FILE_pca)){
 }else{
   pca <- readRDS(FILE_pca)
 }
-plot_PCA(pca, file=paste0(DIR_out, "pca", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE)
+plot_PCA(pca, file=paste0(DIR_out, "pca", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, 
+         size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE, alpha=alpha)
 
 if(NAME_sufix == ""){
   ok_cell <- Filter_PCA(pca, file=paste0(DIR_out, "pca_outlier.png"))
@@ -149,7 +151,8 @@ if(!file.exists(FILE_pca2)){
 }else{
   pca2 <- readRDS(FILE_pca2)
 }
-p1 <- plot_PCA(pca2, file=paste0(DIR_out, "pca2", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE)
+p1 <- plot_PCA(pca2, file=paste0(DIR_out, "pca2", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, 
+               size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE, alpha=alpha)
 
 
 
@@ -163,28 +166,31 @@ if(!file.exists(FILE_tsne)){
 }else{
   tsne <- readRDS(FILE_tsne)
 }
-p2 <- plot_tSNE(tsne, file=paste0(DIR_out, "tsne", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE, legend_file = FILE_legend, le_height = le_height, le_width = le_width)
+p2 <- plot_tSNE(tsne, file=paste0(DIR_out, "tsne", NAME_sufix, ".png"), cell_table = D_cell, 
+                color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE, 
+                legend_file = FILE_legend, le_height = le_height, le_width = le_width, alpha=alpha)
 
 
 
-#=============================================
-# SIMILR
-#=============================================
-FILE_SIMILR <- paste0(DIR_out, "sim.rds")
-if(!file.exists(FILE_SIMILR)){
-  sim <- Clustering_SIMILR(pca)
-  saveRDS(sim, FILE_SIMILR)
-}else{
-  sim <- readRDS(FILE_SIMILR)
-}
-p3 <- plot_SIMILR(sim, file=paste0(DIR_out, "SIMILR", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE)
+# #=============================================
+# # SIMILR
+# #=============================================
+# FILE_SIMILR <- paste0(DIR_out, "sim.rds")
+# if(!file.exists(FILE_SIMILR)){
+#   sim <- Clustering_SIMILR(pca)
+#   saveRDS(sim, FILE_SIMILR)
+# }else{
+#   sim <- readRDS(FILE_SIMILR)
+# }
+# p3 <- plot_SIMILR(sim, file=paste0(DIR_out, "SIMILR", NAME_sufix, ".png"), cell_table = D_cell, color_by=color_by, size_by=size_by, shape_by = shape_by, pallete = Colors, title = TITLE)
 
 
 #=============================================
 # Mix three graph
 #=============================================
-p <- plot_grid(p1 + theme(legend.position="none"), p2+ theme(legend.position="none")+ labs(title=""), p3+ theme(legend.position="none")+ labs(title=""), nrow=3, align="v")
-save_plot(paste0(DIR_out, "clustering_mix", NAME_sufix, ".png"), p, ncol=1, nrow=3)
-
+# p <- plot_grid(p1 + theme(legend.position="none"), p2+ theme(legend.position="none")+ labs(title=""), p3+ theme(legend.position="none")+ labs(title=""), nrow=3, align="v")
+# save_plot(paste0(DIR_out, "clustering_mix", NAME_sufix, ".png"), p, ncol=1, nrow=3)
+p <- plot_grid(p1 + theme(legend.position="none",text = element_text(size=20)), p2+ theme(legend.position="none",text = element_text(size=20))+ labs(title=""), nrow=2, align="v")
+save_plot(paste0(DIR_out, "clustering_mix", NAME_sufix, ".png"), p, ncol=1, nrow=2)
 
 

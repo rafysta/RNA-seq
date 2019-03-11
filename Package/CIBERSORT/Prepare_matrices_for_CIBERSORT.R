@@ -50,7 +50,9 @@ if(!is.matrix(mat)){
 
 ### Convert Ensemble to Gene symbol
 if(FLAG_ensemble){
-  DB_gene <- "W:/Data/Human_seq/hg19/hg19.db"
+  suppressWarnings(suppressMessages(library(RSQLite)))
+  suppressWarnings(suppressMessages(library(dplyr)))
+  DB_gene <- "/wistar/noma/Data/Human_seq/hg19/hg19.db"
   con = dbConnect(SQLite(), DB_gene)
   D_gene <- dbGetQuery(con, "select EnsembleID, gene_symbol from HUGO_gene_symbol")
   dbDisconnect(con)

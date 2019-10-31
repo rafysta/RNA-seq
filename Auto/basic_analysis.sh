@@ -5,7 +5,7 @@
 get_usage(){
 	cat <<EOF
 
-Usage : $0 [OPTION]
+Usage : $0 [OPTION] [fastq files]
 
 Description
 	-h, --help
@@ -15,7 +15,7 @@ Description
 		show version
 
 	-x, --organism
-		organism. {human, mouse, pombe}
+		organism. {human, mouse, pombe, fly}
 
 	-d, --directory
 		data directory having target and control
@@ -23,12 +23,14 @@ Description
 	-n, --name
 		sample name
 
-	-p, --paired
-		paired end or not (default : FALSE)
+	-L, --layout [single / pair]
+		paired end or single (default : single)
 
 	-o, --log
 		log directory
-
+	
+	-t, --thread [thread number]
+		specify thread number. default : 1
 EOF
 }
 
@@ -37,8 +39,8 @@ get_version(){
 }
 
 
-SHORT=hvx:d:n:p:o:
-LONG=help,version,organism:,directory:,name:,paired:,log:
+SHORT=hvx:d:n:L:o:t:
+LONG=help,version,organism:,directory:,name:,layout:,log:,thread:
 PARSED=`getopt --options $SHORT --longoptions $LONG --name "$0" -- "$@"`
 if [[ $? -ne 0 ]]; then
     exit 2
@@ -67,12 +69,16 @@ while true; do
             NAME="$2"
             shift 2
             ;;
-        -p|--paired)
-            PAIRED="$2"
+        -L|--layout)
+            LAYOUT="$2"
             shift 2
             ;;
         -o|--log)
             DIR_LOG="$2"
+            shift 2
+            ;;
+        -t|--thread)
+            THREAD="$2"
             shift 2
             ;;
         --)
@@ -90,42 +96,51 @@ done
 [ ! -n "${NAME}" ] && echo "Please specify sample NAME" && exit 1
 [ ! -n "${ORGANISM}" ] && echo "Please specify organism" && exit 1
 [ ! -n "${DIR_LOG}" ] && echo "Please specify log directory" && exit 1
-PAIRED=${PAIRED:-FALSE}
+LAYOUT=${PAIRED:-single}
+THREAD=${THREAD:-1}
 
 TIME_STAMP=$(date +"%Y-%m-%d")
 DIR_LIB=$(dirname $0)
-
+INPUT_FILES=$@
 
 case $ORGANISM in
-	pombe) BOWTIE_TARGET=ASM294v2.19
-		   CHROM_SIZE=/wistar/noma/Data/S.Pombe_seq/pombase_ASM294v1.18/LENGTH.txt ;;
-	human) BOWTIE_TARGET=hg19
-		   STAR_REF=/wistar/noma/Data/Human_seq/hg19/RSEM_star/hg19
-		   CHROM_SIZE=/wistar/noma/Data/Human_seq/hg19/LENGTH.txt ;;
-	mouse) BOWTIE_TARGET=mm10
-		   CHROM_SIZE=/wistar/noma/Data/Mouse_seq/mm10/LENGTH.txt ;;
+	fly)
+		CHROM_SIZE=${HOME}/Genome/data/drosophila_melanogaster/BDGP6.22/LENGTH.txt
+		STAR_DIR=${HOME}/Genome/data/drosophila_melanogaster/BDGP6.22/STAR
+		RSEM_REF=${HOME}/Genome/data/drosophila_melanogaster/BDGP6.22/RSEM/dros_0
+		;;
 	*)     echo "Please specify correct organism"
 	       eixt 1 ;;
 esac
 
+module load racs-eb 2> /dev/null
+module load samtools
+module load deepTools 2> /dev/null
+module load miniconda
+conda activate rsem
 
+[ ! -e ${DIR_DATA}/${NAME} ] && mkdir ${DIR_DATA}/${NAME}
+cd ${DIR_DATA}/${NAME}
 
-	sbatch -n 8  --job-name=rsem_${NAME} -o "${DIR_LOG}/${TIME_STAMP}_alignment_by_rsem_${NAME}.log" --open-mode append <<EOF
-#!/bin/sh
-export PATH=/cm/shared/wistar/RSEM/RSEM-1.2.31:$PATH
-cd ${DIR_DATA}
-[ ! -e ${NAME} ] && mkdir ${NAME}
+### STAR alignment
+STAR --runThreadN ${THREAD} --genomeDir ${STAR_DIR} --readFilesIn ${INPUT_FILES} --outSAMattributes MD --outFileNamePrefix ${NAME}_ --quantMode TranscriptomeSAM --outSAMtype BAM SortedByCoordinate
 
-# single read
-[ $PAIRED = FALSE ] && rsem-calculate-expression -p 8 --star --star-path /applications/STAR/current --estimate-rspd --keep-intermediate-files --output-genome-bam  ${NAME}.fastq ${STAR_REF} ${NAME}/${NAME}
+## make index file for bam
+samtools index ${NAME}_Aligned.sortedByCoord.out.bam
 
-# STAR alignment paired-end
-[ $PAIRED = TRUE ] && rsem-calculate-expression --paired-end -p 8 --star --star-path /applications/STAR/current --estimate-rspd --keep-intermediate-files --output-genome-bam ${NAME}_1.fastq ${NAME}_2.fastq ${DIR_contig}/RSEM_star/hg19 ${NAME}/${NAME}
+## bamCoverage
+bamCoverage -p ${THREAD} -b ${NAME}_Aligned.sortedByCoord.out.bam -o ${NAME}_Aligned.sortedByCoord.out.bw
 
-EOF
+## RSEM
+if [ $LAYOUT = "single" ]; then
+	RSEM_MODE=""
+else
+	RSEM_MODE="--paired-end"
+fi
+rsem-calculate-expression -p ${THREAD} $RSEM_MODE --bam ${NAME}_Aligned.toTranscriptome.out.bam ${RSEM_REF} ${NAME}
 
-
-
-
+## Cleaning
+rm -r ${NAME}.stat
+rm ${NAME}*.bam ${NAME}*.bai ${NAME}*.wig ${NAME}*.tab
 
 

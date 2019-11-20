@@ -6,6 +6,7 @@ option_list <- list(
   make_option(c("-i", "--in"), default="NA", help="database file name"),
   make_option(c("-o", "--out"), default="NA", help="output directory"),
   make_option(c("-g", "--groups"), default="NA", help="group name separated by commma"),
+  make_option(c("-b", "--batch"), default="NA", help="batch name separated by commma"),
   make_option(c("-s", "--samples"), default="NA", help="target column names separated by commma"),
   make_option(c("-c", "--condition"), default="all", help="condition1,condition2 for comparison (not sample name, use group name). all to output all combinations")
 )
@@ -15,8 +16,7 @@ opt <- parse_args(OptionParser(option_list=option_list))
 suppressWarnings(suppressMessages(library(DESeq2)))
 suppressWarnings(suppressMessages(library(RSQLite)))
 suppressWarnings(suppressMessages(library(gplots)))
-library(RColorBrewer)
-
+suppressWarnings(suppressMessages(library(RColorBrewer)))
 suppressWarnings(suppressMessages(library(ggplot2)))
 suppressWarnings(suppressMessages(library(scales)))
 suppressWarnings(suppressMessages(library(dplyr)))
@@ -45,6 +45,7 @@ if(substring(DIR_OUT, nchar(DIR_OUT), nchar(DIR_OUT)) != "/"){
 }
 SAMPLES <- unlist(strsplit(as.character(opt["samples"]), ","))
 group <- unlist(strsplit(as.character(opt["groups"]), ","))
+batch <- unlist(strsplit(as.character(opt["batch"]), ","))
 
 
 # データの読み込
@@ -57,7 +58,13 @@ rm(con)
 DATA <- as.matrix(D_matrix[,-1])
 rownames(DATA) <- D_matrix$gene
 DATA <- DATA[,SAMPLES]
+
+### filtering
+keep <- rowSums(DATA) > 1
+DATA <- DATA[keep,]
+
 condition <- factor(group)
+batch <- factor(batch)
 rm(D_matrix)
 
 FILE_DESeq_result <- paste0(DIR_OUT, "deseq2.rds")
@@ -65,8 +72,9 @@ if(file.exists(FILE_DESeq_result)){
   dds <- readRDS(FILE_DESeq_result)
 }else{
   # Create a coldata frame and instantiate the DESeqDataSet. See ?DESeqDataSetFromMatrix
-  coldata <- data.frame(row.names=colnames(DATA), condition)
-  dds <- DESeqDataSetFromMatrix(countData=round(DATA), colData=coldata, design=~condition)
+  coldata <- data.frame(row.names=colnames(DATA), condition, batch)
+  # print(coldata)
+  dds <- DESeqDataSetFromMatrix(countData=round(DATA), colData=coldata, design= ~ condition)
   
   # Run the DESeq pipeline
   dds <- DESeq(dds)
@@ -87,35 +95,50 @@ if(!file.exists(FILE_dispersion)){
 
 # Regularized log transformation for clustering/heatmaps, etc
 con = dbConnect(SQLite(), FILE_DB)
-df <- tryCatch(dbGetQuery(con, "select * from norm_read"),
+df <- tryCatch(dbGetQuery(con, "select * from rlog"),
    error = function(c){
      rld <- rlogTransformation(dds)
      # head(assay(rld))
      # hist(assay(rld))
-     DATA.norm <- assay(rld)
-     df <- data.frame(gene=rownames(DATA.norm), DATA.norm)
-     dbWriteTable(con, "norm_read", df, row.names= FALSE, overwrite=TRUE)
+
+     DATA.rlog <- assay(rld)
+     df <- data.frame(gene=rownames(DATA.rlog), DATA.rlog)
+     dbWriteTable(con, "rlog", df, row.names= FALSE, overwrite=TRUE)
      df
    }
 )
+DATA.rlog <- df[,SAMPLES]
+rownames(DATA.rlog) <- df$gene
+df <- tryCatch(dbGetQuery(con, "select * from vsd"),
+               error = function(c){
+                 vsd <- vst(dds)
+                 DATA.vsd <- limma::removeBatchEffect(assay(vsd), vsd$batch)
+                 df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd)
+                 dbWriteTable(con, "vsd", df, row.names= FALSE, overwrite=TRUE)
+                 df
+               }
+)
 dbDisconnect(con)
-DATA.norm <- df[,SAMPLES]
-rownames(DATA.norm) <- df$gene
+DATA.vsd <- df[,SAMPLES]
+rownames(DATA.vsd) <- df$gene
 rm(df, con)
+
 
 
 # Sample distance heatmap
 mycols <- brewer.pal(8, "Dark2")[1:length(unique(condition))]
 FILE_distance <- paste0(DIR_OUT, "qc-heatmap-samples.png")
 if(!file.exists(FILE_distance)){
-  sampleDists <- as.matrix(dist(t(DATA.norm)))
+  sampleDists <- as.matrix(dist(t(DATA.vsd)))
   png(FILE_distance, w=1000, h=1000, pointsize=20)
   heatmap.2(as.matrix(sampleDists), key=F, trace="none",
             col=colorpanel(100, "black", "white"),
             ColSideColors=mycols[condition], RowSideColors=mycols[condition],
-            margin=c(15, 15), main="Sample Distance Matrix")
+            margin=c(15, 15))
   dummy <- dev.off()
+  plot(as.matrix(sampleDists))
 }
+
 
 if(!file.exists(paste0(DIR_OUT, "qc-pca12.png"))){
   LIBRARY_clustering <- paste(script.basename, "../../Clustering_tSNE_PCA.R", sep="/")
@@ -125,15 +148,15 @@ if(!file.exists(paste0(DIR_OUT, "qc-pca12.png"))){
   if(file.exists(FILE_pca)){
     pca <- readRDS(FILE_pca)
   }else{
-    pca <- Clustering_PCA(DATA.norm)
+    pca <- Clustering_PCA(DATA.vsd)
     saveRDS(pca, FILE_pca)
   }
   width <- 4 + max(nchar(group))/8
   cell_table <- data.frame(Cell=SAMPLES, group=group, sample=SAMPLES, stringsAsFactors = FALSE)
   option <- theme(text = element_text(size=15)) + theme_bw()
-  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca12.png"), cell_table=cell_table, color_by="group", size_by=2, width=width, option=option)
-  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca23.png"), cell_table=cell_table, color_by="group", size_by=2, Xcom=2, Ycom=3, width=width, option=option)
-  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca13.png"), cell_table=cell_table, color_by="group", size_by=2, Xcom=1, Ycom=3, width=width, option=option)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca12.png"), cell_table=cell_table, color_by="group", size_by=1.5, label="sample", width=width, option=option)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca23.png"), cell_table=cell_table, color_by="group", size_by=1.5, label="sample", Xcom=2, Ycom=3, width=width, option=option)
+  plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca13.png"), cell_table=cell_table, color_by="group", size_by=1.5, label="sample", Xcom=1, Ycom=3, width=width, option=option)
 }
 
 

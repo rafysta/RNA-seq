@@ -87,12 +87,13 @@ plot_tSNE <- function(tsne, file="", title=NULL,  cell_table="", color_by=NULL, 
 }
 
 plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", color_by=NULL, shape_by=NULL, 
-                     size_by=NULL, width=5.3, alpha=0.5, pallete = NULL,  option=NULL){
+                     size_by=NULL, width=5.3, alpha=0.5, label = NULL, pallete = NULL,  option=NULL){
   ### cell_tableはdata.frame
   # cellというカラムが定義されていること！
   suppressPackageStartupMessages(library(dplyr))
   suppressPackageStartupMessages(library(ggplot2))
   suppressPackageStartupMessages(library(cowplot))
+  suppressWarnings(suppressMessages(library(ggrepel)))
   D_score <- data.frame(Cell=rownames(pca$x), x=pca$x[,Xcom], y=pca$x[,Ycom], stringsAsFactors = FALSE)
   D_table <- dplyr::left_join(D_score, cell_table, by="Cell", copy=FALSE)
 
@@ -100,7 +101,7 @@ plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", co
   contribution <- pca$sdev^2/sum(pca$sdev^2)*100
   
   if(is.null(color_by)){
-    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
+    p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0, label=label)) + geom_point(alpha=alpha) +
       labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
            y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
   }else{
@@ -109,17 +110,20 @@ plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", co
         pallete <-c("#00007F", "blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")
       }
       colors <- colorRampPalette(pallete)(length(unique(D_table[,color_by])))
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0, label=label)) + geom_point(alpha=alpha) +
         scale_color_manual(values=colors, name=color_by) + guides(size = FALSE) +
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
     }else{
       mid <- median(D_table[,color_by], na.rm = TRUE)
-      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0)) + geom_point(alpha=alpha) +
+      p <- ggplot(D_table, aes_string(x="x", y="y", colour=color_by, size=size_by, shape=shape_by, stroke=0, label=label)) + geom_point(alpha=alpha) +
         scale_color_gradient2(midpoint=mid, low="blue", mid="grey90", high="red", space ="Lab" )+
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
     }
+  }
+  if(!is.null(label)){
+    p <- p + geom_text_repel(col='black', size=2)
   }
   if(!is.null(option)){
     p <- p + option

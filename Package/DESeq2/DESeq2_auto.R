@@ -45,7 +45,7 @@ if(substring(DIR_OUT, nchar(DIR_OUT), nchar(DIR_OUT)) != "/"){
 }
 SAMPLES <- unlist(strsplit(as.character(opt["samples"]), ","))
 group <- unlist(strsplit(as.character(opt["groups"]), ","))
-batch <- unlist(strsplit(as.character(opt["batch"]), ","))
+
 
 
 # データの読み込
@@ -64,7 +64,11 @@ keep <- rowSums(DATA) > 1
 DATA <- DATA[keep,]
 
 condition <- factor(group)
-batch <- factor(batch)
+OPT_batch <- as.character(opt["batch"])
+if(OPT_batch != "NA"){
+  batch <- unlist(strsplit(OPT_batch, ","))
+  batch <- factor(batch)
+}
 rm(D_matrix)
 
 FILE_DESeq_result <- paste0(DIR_OUT, "deseq2.rds")
@@ -72,7 +76,12 @@ if(file.exists(FILE_DESeq_result)){
   dds <- readRDS(FILE_DESeq_result)
 }else{
   # Create a coldata frame and instantiate the DESeqDataSet. See ?DESeqDataSetFromMatrix
-  coldata <- data.frame(row.names=colnames(DATA), condition, batch)
+  if(OPT_batch != "NA"){
+    coldata <- data.frame(row.names=colnames(DATA), condition, batch)
+  }else{
+    coldata <- data.frame(row.names=colnames(DATA), condition)
+  }
+  
   # print(coldata)
   dds <- DESeqDataSetFromMatrix(countData=round(DATA), colData=coldata, design= ~ condition)
   
@@ -112,7 +121,11 @@ rownames(DATA.rlog) <- df$gene
 df <- tryCatch(dbGetQuery(con, "select * from vsd"),
                error = function(c){
                  vsd <- vst(dds)
-                 DATA.vsd <- limma::removeBatchEffect(assay(vsd), vsd$batch)
+                 if(OPT_batch != "NA"){
+                   DATA.vsd <- limma::removeBatchEffect(assay(vsd), vsd$batch)
+                 }else{
+                   DATA.vsd <- assay(vsd)
+                 }
                  df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd)
                  dbWriteTable(con, "vsd", df, row.names= FALSE, overwrite=TRUE)
                  df

@@ -111,7 +111,7 @@ df <- tryCatch(dbGetQuery(con, "select * from rlog"),
      # hist(assay(rld))
 
      DATA.rlog <- assay(rld)
-     df <- data.frame(gene=rownames(DATA.rlog), DATA.rlog)
+     df <- data.frame(gene=rownames(DATA.rlog), DATA.rlog, check.names = FALSE)
      dbWriteTable(con, "rlog", df, row.names= FALSE, overwrite=TRUE)
      df
    }
@@ -126,7 +126,7 @@ df <- tryCatch(dbGetQuery(con, "select * from vsd"),
                  }else{
                    DATA.vsd <- assay(vsd)
                  }
-                 df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd)
+                 df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd, check.names = FALSE)
                  dbWriteTable(con, "vsd", df, row.names= FALSE, overwrite=TRUE)
                  df
                }
@@ -206,7 +206,7 @@ getDiffGenes <- function(con1, con2){
   ### MA plot
   FILE_MA <- paste0(DIR_out_sub, "maplot.png")
   df <- data.frame(x=res$baseMean, y=res$log2FoldChange, p=res$padj)
-  p <- ggplot(df, aes(x, y)) + geom_point(alpha=0.3, size=1.3, col=ifelse(!is.na(df$p) & df$p < 0.05, "red", "grey30")) +
+  p <- ggplot(df, aes(x, y)) + geom_point(alpha=0.3, size=1.1, col=ifelse(!is.na(df$p) & df$p < 0.05, "red", "grey30")) +
     scale_x_log10(  breaks = trans_breaks("log10", function(x) 10^x),　labels = trans_format("log10", math_format(10^.x))  ) +
     labs(x="Average score", y=paste0("Log2 (", con1, " / ", con2, ")"), 
          subtitle=paste0("Up: ", sum(index_up), ", Down: ", sum(index_down), ", NoChange: ", length(sig_cate) - sum(index_up) - sum(index_down))) +

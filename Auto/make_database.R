@@ -25,10 +25,13 @@ getRSEM <- function(n){
   df
 }
 D_table <- do.call(rbind, pblapply(1:length(FILE_RSEM), getRSEM))
+D_table <- as.data.frame(D_table)
 
 con = dbConnect(SQLite(), FILE_DB)
 for(t in c("read", "TPM", "FPKM")){
-  df <- D_table[,c("gene", "sample", t)] %>% tidyr::spread(key = sample, value = !!as.name(t))
+  df <- D_table[,c("gene", "sample", t)]
+  colnames(df) <- c("gene", "sample", "score")
+  df <- df %>% tidyr::spread(key = sample, value = score)
   dbWriteTable(con, t, df, row.names= FALSE, overwrite=TRUE)
 }
 dbDisconnect(con)

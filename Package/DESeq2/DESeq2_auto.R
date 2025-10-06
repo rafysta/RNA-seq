@@ -8,7 +8,9 @@ option_list <- list(
   make_option(c("-g", "--groups"), default="NA", help="group name separated by commma"),
   make_option(c("-b", "--batch"), default="NA", help="batch name separated by commma"),
   make_option(c("-s", "--samples"), default="NA", help="target column names separated by commma"),
-  make_option(c("-c", "--condition"), default="all", help="condition1,condition2 for comparison (not sample name, use group name). all to output all combinations")
+  make_option(c("-c", "--condition"), default="all", help="condition1,condition2 for comparison (not sample name, use group name). all to output all combinations"),
+  make_option(c("--fc"), default="0", help="fold-change threshold"),
+  make_option(c("--FDR"), default="0.05", help="FDR threshold")
 )
 opt <- parse_args(OptionParser(option_list=option_list))
 
@@ -29,14 +31,6 @@ initial.options <- commandArgs(trailingOnly = FALSE)
 file.arg.name <- "--file="
 script.name <- sub(file.arg.name, "", initial.options[grep(file.arg.name, initial.options)])
 script.basename <- dirname(script.name)
-
-
-### test data
-# FILE_DB <- "T:/Project/010_20190930_Chris_RNAseq_firstTime/data/RSEM_genes_result.db"
-# SAMPLES <- c("Lee_b1", "Lee_b2", "Lee_b3", "White", "WT_bio1", "WT_bio2", "Zinzen")
-# group <- c("Lee", "Lee", "Lee", "White", "WT", "WT", "Zinzen")
-# LIBRARY_clustering <- "T:/Library/RNA-seq/Clustering_tSNE_PCA.R"
-# DIR_OUT <- "T:/Project/010_20190930_Chris_RNAseq_firstTime/out/2019-10-31_DESeq2_analysis/"
 
 
 DIR_OUT <- as.character(opt["out"])
@@ -101,41 +95,66 @@ if(!file.exists(FILE_dispersion)){
 }
 
 
-
 # Regularized log transformation for clustering/heatmaps, etc
 con = dbConnect(SQLite(), FILE_DB)
-df <- tryCatch(dbGetQuery(con, "select * from rlog"),
+df.all <- tryCatch(dbGetQuery(con, paste0("select * from rlog")),
+   error = function(c){
+     NULL
+   }
+)
+df <- tryCatch(dbGetQuery(con, paste0("select gene, ", paste0(SAMPLES, collapse = ", "),  " from rlog")),
    error = function(c){
      rld <- rlogTransformation(dds)
-     # head(assay(rld))
-     # hist(assay(rld))
-
      DATA.rlog <- assay(rld)
      df <- data.frame(gene=rownames(DATA.rlog), DATA.rlog, check.names = FALSE)
+     if(!is.null(df.all)){
+       if(sum(!(colnames(df.all) %in% colnames(df)))>0){
+         SAMPLE_OTHER <- setdiff(colnames(df.all), SAMPLES)
+         df <- dplyr::left_join(df.all %>% select(all_of(SAMPLE_OTHER)), df, by="gene")
+       }
+     }
      dbWriteTable(con, "rlog", df, row.names= FALSE, overwrite=TRUE)
      df
    }
 )
+rm(df.all)
+
+
 DATA.rlog <- df[,SAMPLES]
 rownames(DATA.rlog) <- df$gene
-df <- tryCatch(dbGetQuery(con, "select * from vsd"),
-               error = function(c){
-                 vsd <- vst(dds)
-                 if(OPT_batch != "NA"){
-                   DATA.vsd <- limma::removeBatchEffect(assay(vsd), vsd$batch)
-                 }else{
-                   DATA.vsd <- assay(vsd)
-                 }
-                 df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd, check.names = FALSE)
-                 dbWriteTable(con, "vsd", df, row.names= FALSE, overwrite=TRUE)
-                 df
-               }
+
+df.all <- tryCatch(dbGetQuery(con, paste0("select * from vsd")),
+   error = function(c){
+     NULL
+   }
 )
+df <- tryCatch(dbGetQuery(con, paste0("select gene, ", paste0(SAMPLES, collapse = ", "),  " from vsd")),
+   error = function(c){
+     vsd <- vst(dds)
+     if(OPT_batch != "NA"){
+       DATA.vsd <- limma::removeBatchEffect(assay(vsd), vsd$batch)
+     }else{
+       DATA.vsd <- assay(vsd)
+     }
+     df <- data.frame(gene=rownames(DATA.vsd), DATA.vsd, check.names = FALSE)
+     if(!is.null(df.all)){
+       if(sum(!(colnames(df.all) %in% colnames(df)))>0){
+         SAMPLE_OTHER <- setdiff(colnames(df.all), SAMPLES)
+         df <- dplyr::left_join(df.all %>% select(all_of(SAMPLE_OTHER)), df, by="gene")
+       }
+     }
+     dbWriteTable(con, "vsd", df, row.names= FALSE, overwrite=TRUE)
+     df
+   }
+)
+rm(df.all)
+
 dbDisconnect(con)
 DATA.vsd <- df[,SAMPLES]
 rownames(DATA.vsd) <- df$gene
 rm(df, con)
 
+DATA.vsd <- DATA.vsd[complete.cases(DATA.vsd),]
 
 
 # Sample distance heatmap
@@ -172,8 +191,10 @@ if(!file.exists(paste0(DIR_OUT, "qc-pca12.png"))){
   plot_PCA(pca, file=paste0(DIR_OUT, "qc-pca13.png"), cell_table=cell_table, color_by="group", size_by=1.5, label="sample", Xcom=1, Ycom=3, width=width, option=option)
 }
 
-
 # differential expression genes
+THRESHOLD_fc <- as.numeric(as.character(opt["fc"]))
+THRESHOLD_FDR <- as.numeric(as.character(opt["FDR"]))
+
 getDiffGenes <- function(con1, con2){
   CON_TYPE <- paste0("DE_", con1, "_divide_", con2)
   dir.create(paste0(DIR_OUT, CON_TYPE), showWarnings = FALSE)
@@ -197,16 +218,16 @@ getDiffGenes <- function(con1, con2){
   hist(res$pvalue, breaks=50, col="grey", main="Histogram of P-value", xlab="P-value")
   dummy <- dev.off()
 
-  index_up <- res$log2FoldChange > 0 & res$padj < 0.05 & !is.na(res$padj)
-  index_down <- res$log2FoldChange < 0 & res$padj < 0.05 & !is.na(res$padj)
+  index_up <- res$log2FoldChange > 0 & res$padj < THRESHOLD_FDR & !is.na(res$padj) & abs(res$log2FoldChange) > THRESHOLD_fc
+  index_down <- res$log2FoldChange < 0 & res$padj < THRESHOLD_FDR & !is.na(res$padj) & abs(res$log2FoldChange) > THRESHOLD_fc
   sig_cate <- rep(0, nrow(DATA))
   sig_cate[index_up] <- 1
   sig_cate[index_down] <- -1
   
   ### MA plot
   FILE_MA <- paste0(DIR_out_sub, "maplot.png")
-  df <- data.frame(x=res$baseMean, y=res$log2FoldChange, p=res$padj)
-  p <- ggplot(df, aes(x, y)) + geom_point(alpha=0.3, size=1.1, col=ifelse(!is.na(df$p) & df$p < 0.05, "red", "grey30")) +
+  df <- data.frame(x=res$baseMean, y=res$log2FoldChange, SigCate=sig_cate)
+  p <- ggplot(df, aes(x, y)) + geom_point(alpha=0.3, size=1.1, col=ifelse(df$SigCate == 0, "grey30", "red")) +
     scale_x_log10(  breaks = trans_breaks("log10", function(x) 10^x),　labels = trans_format("log10", math_format(10^.x))  ) +
     labs(x="Average score", y=paste0("Log2 (", con1, " / ", con2, ")"), 
          subtitle=paste0("Up: ", sum(index_up), ", Down: ", sum(index_down), ", NoChange: ", length(sig_cate) - sum(index_up) - sum(index_down))) +

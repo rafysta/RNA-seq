@@ -33,10 +33,14 @@ checkParameter <- function(name){
 
 
 Clustering_PCA <- function(DATA){
-  var_line <- apply(DATA, 1, var, na.rm=TRUE)
-  DATA <- DATA[var_line != 0,]
-  pca <- prcomp(t(DATA), scale=TRUE)
-  pca
+  DATA <- as.matrix(DATA)
+  storage.mode(DATA) <- "double"
+  
+  var_line <- apply(DATA, 1, stats::var, na.rm = TRUE)
+  keep <- is.finite(var_line) & (var_line > 0)
+  if (any(!keep)) DATA <- DATA[keep, , drop = FALSE]
+  
+  stats::prcomp(t(DATA), center = TRUE, scale. = TRUE)
 }
 
 Clustering_tSNE <- function(DATA, seed=20, perplexity = 10, theta = 0, max_iter=3000){
@@ -111,7 +115,7 @@ plot_PCA <- function(pca, file="", title=NULL, Xcom=1, Ycom=2, cell_table="", co
       }
       colors <- colorRampPalette(pallete)(length(unique(D_table[,color_by])))
       p <- ggplot(D_table, aes_string(x="x", y="y", colour=factor(D_table[,color_by]), size=size_by, shape=shape_by, stroke=0, label=label)) + geom_point(alpha=alpha) +
-        scale_color_manual(values=colors, name=color_by) + guides(size = FALSE) +
+        scale_color_manual(values=colors, name=color_by) + guides(size = "none") +
         labs(x=paste("PC", Xcom, " (", format(contribution[Xcom], digits = 3), "%)", sep=""),
              y=paste("PC", Ycom, " (", format(contribution[Ycom], digits = 3), "%)", sep=""), title=title)
     }else{
